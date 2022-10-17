@@ -9,7 +9,8 @@ app.use(express.static(__dirname));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 
-const dbURL = "mongodb+srv://user:user@node-js.mwko205.mongodb.net/test";
+mongoose.Promise = Promise;
+const dbURL = "mongodb+srv://user:user@cluster0.xvfjbe8.mongodb.net/test";
 
 const Message = mongoose.model("Message", {
   name: String,
@@ -22,15 +23,36 @@ app.get("/messages", (req, res) => {
   });
 });
 
-app.post("/messages", (req, res) => {
-  const message = new Message(req.body);
-
-  message.save((err) => {
-    if (err) res.send(500);
-
-    io.emit("message", req.body);
-    res.sendStatus(200);
+app.get("/messages/:user", (req, res) => {
+  const user = req.params.user;
+  Message.find({ name: user }, (err, messages) => {
+    res.send(messages);
   });
+});
+
+app.post("/messages", async (req, res) => {
+  try {
+    const message = new Message(req.body);
+
+    let savedMessage = await message.save();
+
+    console.log("Saved");
+
+    let censored = await Message.findOne({ message: "badword" });
+
+    if (censored) {
+      await Message.deleteOne({ _id: censored.id });
+      console.log("Censored message deleted", censored);
+    } else {
+      io.emit("message", req.body);
+    }
+    res.sendStatus(200);
+  } catch (error) {
+    res.sendStatus(500);
+    return console.error(error);
+  } finally {
+    console.log("Message post is called");
+  }
 });
 
 io.on("connection", (socket) => {
